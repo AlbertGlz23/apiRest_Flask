@@ -28,10 +28,10 @@ campos_alumno = {
 }
 
 campos_profesor = {
-    "numeroEmpleado": int,
+    "numeroEmpleado": (int, float),
     "nombres": str,
     "apellidos": str,
-    "horasClase": int
+    "horasClase": (int, float)
 }
 
 # Lógica de los alumnos
@@ -51,16 +51,20 @@ def get_alumno(id):
 def post_alumno():
     try:
         data = request.get_json()
+        if not data:
+            return jsonify({"error": "No se enviaron datos"}), 400
+            
         es_valido, mensaje = validar_campos(data, campos_alumno)
         if not es_valido:
-            return jsonify({"error": mensaje}), 500
+            # Cambiado de 500 a 400 porque es error del cliente
+            return jsonify({"error": mensaje}), 400 
         
         nuevo_id = max(db["alumnos"].keys() or [0]) + 1
         nuevo_alumno = {"id": nuevo_id, **data}
         db["alumnos"][nuevo_id] = nuevo_alumno
         return jsonify(nuevo_alumno), 201
-    except:
-        return jsonify({"error": "Error interno"}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/alumnos/<int:id>', methods=['PUT'])
 def put_alumno(id):
@@ -99,16 +103,20 @@ def get_profesor(id):
 def post_profesor():
     try:
         data = request.get_json()
+        if not data:
+            return jsonify({"error": "No se enviaron datos"}), 400
+
         es_valido, mensaje = validar_campos(data, campos_profesor)
         if not es_valido:
-            return jsonify({"error": mensaje}), 500
+
+            return jsonify({"error": mensaje}), 400
         
         nuevo_id = max(db["profesores"].keys() or [0]) + 1
         nuevo_profesor = {"id": nuevo_id, **data}
         db["profesores"][nuevo_id] = nuevo_profesor
         return jsonify(nuevo_profesor), 201
-    except:
-        return jsonify({"error": "Error interno"}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/profesores/<int:id>', methods=['PUT'])
 def put_profesor(id):
