@@ -2,24 +2,36 @@ from flask import Flask, jsonify, request
 
 app = Flask(__name__)
 
-# Diccionario de alumnos y profesores
+#Diccionario usado como BD
+
 db = {
     "alumnos": {},
     "profesores": {}
 }
 
-# Estructura para las validaciones
-def validar_campos(datos, campos_esperados):
-    for campo, tipo in campos_esperados.items():
+#Función de apoyo para la validación de campos
 
-        if campo not in datos or str(datos[campo]).strip() == "":
-            return False, f"El campo {campo} es obligatorio y no puede estar vacío."
+def validar_campos(datos, campos_esperados, entidad):
+    if not datos:
+        return False, "No se enviaron datos"
+    
+    for campo, tipo in campos_esperados.items():
+        if campo not in datos or datos[campo] is None or datos[campo] == "":
+            return False, f"El campo {campo} es obligatorio"
         
         if not isinstance(datos[campo], tipo):
-            return False, f"El campo {campo} debe ser de tipo {tipo}."
+            return False, f"El campo {campo} debe ser de tipo {tipo}"
+            
+    if entidad == "alumno" and datos.get('promedio', 0) < 0:
+        return False, "El promedio no puede ser negativo"
+    
+    if entidad == "profesor" and datos.get('horasClase', 0) < 0:
+        return False, "Las horas no pueden ser negativas"
+        
     return True, None
 
-# Campos de las entidades
+#Definición de los atributos de alumnos y profesores
+
 campos_alumno = {
     "nombres": str,
     "apellidos": str,
@@ -28,13 +40,13 @@ campos_alumno = {
 }
 
 campos_profesor = {
-    "numeroEmpleado": (int, float),
+    "numeroEmpleado": int,
     "nombres": str,
     "apellidos": str,
-    "horasClase": (int, float)
+    "horasClase": int
 }
 
-# Lógica de los alumnos
+#Lógica de la API para los alumnos.
 
 @app.route('/alumnos', methods=['GET'])
 def get_alumnos():
@@ -49,44 +61,48 @@ def get_alumno(id):
 
 @app.route('/alumnos', methods=['POST'])
 def post_alumno():
-    try:
-        data = request.get_json()
-        if not data:
-            return jsonify({"error": "No se enviaron datos"}), 400
-            
-        es_valido, mensaje = validar_campos(data, campos_alumno)
-        if not es_valido:
-            # Cambiado de 500 a 400 porque es error del cliente
-            return jsonify({"error": mensaje}), 400 
+    data = request.get_json()
+    es_valido, mensaje = validar_campos(data, campos_alumno, "alumno")
+    if not es_valido:
+        return jsonify({"error": mensaje}), 400
         
-        nuevo_id = max(db["alumnos"].keys() or [0]) + 1
-        nuevo_alumno = {"id": nuevo_id, **data}
-        db["alumnos"][nuevo_id] = nuevo_alumno
-        return jsonify(nuevo_alumno), 201
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    nuevo_id = data.get('id', max(db["alumnos"].keys() or [0]) + 1)
+    nuevo_alumno = {
+        "id": nuevo_id,
+        "nombres": data['nombres'],
+        "apellidos": data['apellidos'],
+        "matricula": data['matricula'],
+        "promedio": data['promedio']
+    }
+    db["alumnos"][nuevo_id] = nuevo_alumno
+    return jsonify(nuevo_alumno), 201
 
 @app.route('/alumnos/<int:id>', methods=['PUT'])
 def put_alumno(id):
     if id not in db["alumnos"]:
-        return jsonify({"error": "No encontrado"}), 404
+        return jsonify({"error": "Alumno no encontrado"}), 404
     
     data = request.get_json()
-    es_valido, mensaje = validar_campos(data, campos_alumno)
+    es_valido, mensaje = validar_campos(data, campos_alumno, "alumno")
     if not es_valido:
-        return jsonify({"error": mensaje}), 500
+        return jsonify({"error": mensaje}), 400
         
-    db["alumnos"][id] = {"id": id, **data}
+    db["alumnos"][id].update({
+        "nombres": data['nombres'],
+        "apellidos": data['apellidos'],
+        "matricula": data['matricula'],
+        "promedio": data['promedio']
+    })
     return jsonify(db["alumnos"][id]), 200
 
 @app.route('/alumnos/<int:id>', methods=['DELETE'])
 def delete_alumno(id):
     if id in db["alumnos"]:
         del db["alumnos"][id]
-        return jsonify({"res": "Eliminado"}), 200
-    return jsonify({"error": "No encontrado"}), 404
+        return jsonify({"mensaje": "Alumno eliminado"}), 200
+    return jsonify({"error": "Alumno no encontrado"}), 404
 
-# Lógica de los profesores
+#Lógica de la API para los profesores
 
 @app.route('/profesores', methods=['GET'])
 def get_profesores():
@@ -101,42 +117,46 @@ def get_profesor(id):
 
 @app.route('/profesores', methods=['POST'])
 def post_profesor():
-    try:
-        data = request.get_json()
-        if not data:
-            return jsonify({"error": "No se enviaron datos"}), 400
-
-        es_valido, mensaje = validar_campos(data, campos_profesor)
-        if not es_valido:
-
-            return jsonify({"error": mensaje}), 400
+    data = request.get_json()
+    es_valido, mensaje = validar_campos(data, campos_profesor, "profesor")
+    if not es_valido:
+        return jsonify({"error": mensaje}), 400
         
-        nuevo_id = max(db["profesores"].keys() or [0]) + 1
-        nuevo_profesor = {"id": nuevo_id, **data}
-        db["profesores"][nuevo_id] = nuevo_profesor
-        return jsonify(nuevo_profesor), 201
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    nuevo_id = data.get('id', max(db["profesores"].keys() or [0]) + 1)
+    nuevo_profesor = {
+        "id": nuevo_id,
+        "numeroEmpleado": data['numeroEmpleado'],
+        "nombres": data['nombres'],
+        "apellidos": data['apellidos'],
+        "horasClase": data['horasClase']
+    }
+    db["profesores"][nuevo_id] = nuevo_profesor
+    return jsonify(nuevo_profesor), 201
 
 @app.route('/profesores/<int:id>', methods=['PUT'])
 def put_profesor(id):
     if id not in db["profesores"]:
-        return jsonify({"error": "No encontrado"}), 404
+        return jsonify({"error": "Profesor no encontrado"}), 404
     
     data = request.get_json()
-    es_valido, mensaje = validar_campos(data, campos_profesor)
+    es_valido, mensaje = validar_campos(data, campos_profesor, "profesor")
     if not es_valido:
-        return jsonify({"error": mensaje}), 500
+        return jsonify({"error": mensaje}), 400
         
-    db["profesores"][id] = {"id": id, **data}
+    db["profesores"][id].update({
+        "numeroEmpleado": data['numeroEmpleado'],
+        "nombres": data['nombres'],
+        "apellidos": data['apellidos'],
+        "horasClase": data['horasClase']
+    })
     return jsonify(db["profesores"][id]), 200
 
 @app.route('/profesores/<int:id>', methods=['DELETE'])
 def delete_profesor(id):
     if id in db["profesores"]:
         del db["profesores"][id]
-        return jsonify({"res": "Eliminado"}), 200
-    return jsonify({"error": "No encontrado"}), 404
+        return jsonify({"mensaje": "Profesor eliminado"}), 200
+    return jsonify({"error": "Profesor no encontrado"}), 404
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    app.run(host='0.0.0.0', port=80)
